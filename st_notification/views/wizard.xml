@@ -1,0 +1,36 @@
+<odoo>
+    <record id="token_user_match_wizard_form" model="ir.ui.view">
+        <field name="name">Token User Match Wizard</field>
+        <field name="model">token.user.match.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Auto Match Token dengan User">
+                <p>
+                    Wizard ini akan secara otomatis mencocokkan token Firebase dari mobile app
+                    dengan user yang sesuai berdasarkan data yang tersimpan di sistem.
+                </p>
+                <footer>
+                    <button name="action_auto_match_all" type="object" 
+                            string="Auto Match Semua Token" class="btn-primary"/>
+                    <button name="action_sync_firebase_tokens" type="object" 
+                            string="Sync Firebase Tokens" class="btn-secondary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_token_user_match_wizard" model="ir.actions.act_window">
+        <field name="name">Auto Match Token Users</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">token.user.match.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <!-- Menu item untuk wizard -->
+    <menuitem action="action_token_user_match_wizard" id="menu_token_user_match_wizard"
+              parent="firebase_push_notification.menu_firebase_push_notification_push"
+              name="Auto Match Tokens"
+              sequence="95"/>
+
+</odoo>

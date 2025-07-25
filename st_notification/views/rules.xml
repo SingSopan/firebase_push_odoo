@@ -1,0 +1,51 @@
+<odoo>
+
+    <record id="view_order_postnotif_form_inherit" model="ir.ui.view">
+        <field name="name">sale.order.postnotif.view.form</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form" />
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_cancel']" position="before">
+                <button type="object" name="mobile_post_notification" string="Post Notif"/>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_notification_rules_tree" model="ir.ui.view">
+        <field name="name">view_notification_rules_tree</field>
+        <field name="model">push.notification.rules</field>
+        <field name="arch" type="xml">
+            <tree string="Notification rules">
+                <field name="name"/>
+                <field name="model_id"/>
+<!--                <field name="model_name"/>-->
+                <field name="state"/>
+                <field name="msg_title"/>
+                <field name="note"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_notification_rules_filter" model="ir.ui.view">
+        <field name="name">view_notification_rules_filter</field>
+        <field name="model">push.notification.rules</field>
+        <field name="arch" type="xml">
+            <search string="Search rules">
+                <field name="name"/>
+                <field name="model_id"/>
+                <field name="user_ids"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_notification_rules_action" model="ir.actions.act_window">
+        <field name="name">Notification rules</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">push.notification.rules</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem action="view_notification_rules_action" id="view_notification_rules_menu"
+              parent="firebase_push_notification.menu_firebase_push_notification_push"
+              sequence="100"/>
+</odoo>
+

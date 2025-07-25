@@ -1,0 +1,4 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_push_notification_rules,push_notification_rules,model_push_notification_rules,base.group_system,1,1,1,1
+access_notification_token,notification_token,model_push_notification_token,base.group_user,1,1,1,1
+access_token_user_match_wizard,token_user_match_wizard,model_token_user_match_wizard,base.group_user,1,1,1,1

@@ -1,0 +1,40 @@
+<odoo>
+    <!-- Automated Action untuk auto-match token -->
+    <record id="ir_cron_auto_match_tokens" model="ir.cron">
+        <field name="name">Auto Match Firebase Tokens</field>
+        <field name="model_id" ref="st_notification.model_push_notification_token"/>
+        <field name="state">code</field>
+        <field name="code">
+tokens_without_user = model.search([('user_id', '=', False)])
+matched_count = 0
+
+for token_record in tokens_without_user:
+    firebase_token = env['mail.firebase'].search([('token','=',token_record.token)], limit=1)
+    if firebase_token and firebase_token.user_id:
+        token_record.write({'user_id': firebase_token.user_id.id})
+        matched_count += 1
+
+log("Auto-matched %d tokens with users" % matched_count)
+        </field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+
+    <!-- Server Action untuk auto match manual -->
+    <record id="server_action_auto_match_tokens" model="ir.actions.server">
+        <field name="name">Auto Match Tokens</field>
+        <field name="model_id" ref="st_notification.model_push_notification_token"/>
+        <field name="binding_model_id" ref="st_notification.model_push_notification_token"/>
+        <field name="state">code</field>
+        <field name="code">
+for token_record in records:
+    if not token_record.user_id:
+        firebase_token = env['mail.firebase'].search([('token','=',token_record.token)], limit=1)
+        if firebase_token and firebase_token.user_id:
+            token_record.write({'user_id': firebase_token.user_id.id})
+        </field>
+    </record>
+
+</odoo>

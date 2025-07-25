@@ -1,0 +1,60 @@
+<odoo>
+
+    <record id="view_notification_token_tree" model="ir.ui.view">
+        <field name="name">view_notification_token_tree</field>
+        <field name="model">push.notification.token</field>
+        <field name="arch" type="xml">
+            <tree string="Notification token" create="0">
+                <header>
+                    <button name="action_auto_match_users" type="object" string="Auto Match Users" class="btn-primary"/>
+                </header>
+                <field name="date" readonly="1"/>
+                <field name="token" readonly="1"/>
+                <field name="user_id"/>
+                <field name="partner_id"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_notification_token_form" model="ir.ui.view">
+        <field name="name">view_notification_token_form</field>
+        <field name="model">push.notification.token</field>
+        <field name="arch" type="xml">
+            <form string="Notification token" create="0">
+                <group>
+                    <group>
+                        <field name="date" readonly="1"/>
+                        <field name="token" readonly="1"/>
+                    </group>
+                    <group>
+                        <field name="user_id" readonly="0"/>
+                        <field name="partner_id"/>
+                    </group>
+                </group>
+            </form>
+        </field>
+    </record>
+    <record id="view_notification_token_filter" model="ir.ui.view">
+        <field name="name">view_notification_token_filter</field>
+        <field name="model">push.notification.token</field>
+        <field name="arch" type="xml">
+            <search string="Search token">
+                <field name="date"/>
+                <field name="user_id"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_notification_token_action" model="ir.actions.act_window">
+        <field name="name">Notification token</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">push.notification.token</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem action="view_notification_token_action" id="view_notification_token_menu"
+              parent="firebase_push_notification.menu_firebase_push_notification_push"
+              sequence="90"/>
+
+</odoo>
+
