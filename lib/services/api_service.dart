@@ -3,7 +3,9 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:webview_odoo_push/models/token_response.dart';
+import 'package:webview_odoo_push/services/session_manager.dart';
 import 'package:webview_odoo_push/utils/constants.dart';
+import 'package:webview_odoo_push/utils/app_utils.dart';
 import 'package:flutter/foundation.dart';
 
 class ApiService {
@@ -11,22 +13,25 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
+  final SessionManager _sessionManager = SessionManager();
   String? _sessionCookies;
 
   /// Set session cookies from WebView for authentication
   void setSessionCookies(String cookies) {
     _sessionCookies = cookies;
     _saveSessionCookies(cookies);
-    if (kDebugMode) {
-      print('API Service: Session cookies updated');
-    }
+    AppUtils.logInfo('API Service: Session cookies updated');
   }
 
   /// Get headers for API requests including session cookies
   Map<String, String> _getHeaders() {
     final headers = Map<String, String>.from(Constants.defaultHeaders);
-    if (_sessionCookies != null && _sessionCookies!.isNotEmpty) {
-      headers['Cookie'] = _sessionCookies!;
+    
+    // Try to get cookies from session manager first
+    String? cookies = _sessionManager.sessionCookies ?? _sessionCookies;
+    
+    if (cookies != null && cookies.isNotEmpty) {
+      headers['Cookie'] = cookies;
     }
     return headers;
   }
@@ -251,14 +256,18 @@ class ApiService {
   /// Check if user is logged in and has valid session
   Future<bool> isUserLoggedIn() async {
     try {
+      // Check session manager first
+      if (_sessionManager.isLoggedIn) {
+        return true;
+      }
+      
+      // Fallback to local check
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool(Constants.keyUserLoggedIn) ?? false;
       final hasSessionCookies = _sessionCookies != null && _sessionCookies!.isNotEmpty;
       return isLoggedIn && hasSessionCookies;
     } catch (e) {
-      if (kDebugMode) {
-        print('Error checking login status: $e');
-      }
+      AppUtils.logError('Checking login status', e);
       return false;
     }
   }
@@ -266,19 +275,17 @@ class ApiService {
   /// Clear all session data
   Future<void> clearSession() async {
     try {
+      await _sessionManager.clearSession();
+      
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(Constants.keySessionCookies);
       await prefs.remove(Constants.keyUserLoggedIn);
       await prefs.remove(Constants.keyUserId);
       await prefs.remove(Constants.keyUserName);
       _sessionCookies = null;
-      if (kDebugMode) {
-        print('API Service: Session cleared');
-      }
+      AppUtils.logInfo('API Service: Session cleared');
     } catch (e) {
-      if (kDebugMode) {
-        print('Error clearing session: $e');
-      }
+      AppUtils.logError('Clearing session', e);
     }
   }
 }

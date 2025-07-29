@@ -11,8 +11,10 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:webview_odoo_push/services/firebase_service.dart';
 import 'package:webview_odoo_push/services/api_service.dart';
+import 'package:webview_odoo_push/services/session_manager.dart';
 import 'package:webview_odoo_push/models/notification_model.dart';
 import 'package:webview_odoo_push/utils/constants.dart';
+import 'package:webview_odoo_push/utils/app_utils.dart';
 
 class WebViewScreen extends StatefulWidget {
   const WebViewScreen({super.key});
@@ -30,6 +32,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
   late FirebaseService _firebaseService;
   late ApiService _apiService;
+  late SessionManager _sessionManager;
   bool _isUserLoggedIn = false;
 
   @override
@@ -37,6 +40,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
     super.initState();
     _firebaseService = FirebaseService();
     _apiService = ApiService();
+    _sessionManager = SessionManager();
     
     _initializeServices();
     _requestPermissions();
@@ -45,11 +49,24 @@ class _WebViewScreenState extends State<WebViewScreen> {
   }
 
   Future<void> _initializeServices() async {
-    // Initialize Firebase service with callbacks
-    await _firebaseService.initialize(
-      onUrlUpdate: _updateUrlFromNotification,
-      onNotificationReceived: _handleNotificationReceived,
-    );
+    try {
+      // Initialize session manager first
+      await _sessionManager.initialize();
+      
+      // Set initial login state
+      _isUserLoggedIn = _sessionManager.isLoggedIn;
+      
+      // Initialize Firebase service with callbacks
+      await _firebaseService.initialize(
+        onUrlUpdate: _updateUrlFromNotification,
+        onNotificationReceived: _handleNotificationReceived,
+      );
+
+      AppUtils.logInfo('All services initialized successfully');
+    } catch (e) {
+      AppUtils.logError('Initializing services', e);
+      _showToast('Error initializing app services');
+    }
   }
 
   void _updateUrlFromNotification(String url) {
@@ -68,7 +85,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
   void _handleNotificationReceived(NotificationModel notification) {
     // Handle notification received callback
-    print("Notification received: ${notification.title}");
+    AppUtils.logInfo("Notification received: ${notification.title}");
     if (notification.title != null) {
       _showToast("New notification: ${notification.title}");
     }
@@ -193,7 +210,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
       bool isLoginSuccess = _isLoginSuccessUrl(url);
       
       if (isLoginSuccess && !_isUserLoggedIn) {
-        print("Login detected, extracting cookies...");
+        AppUtils.logInfo("Login detected, extracting cookies...");
         
         // Extract cookies from WebView
         await _extractAndStoreCookies();
@@ -207,7 +224,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
         _showToast("Login successful! Token registered.");
       }
     } catch (e) {
-      print("Error in login detection: $e");
+      AppUtils.logError("Login detection", e);
     }
   }
 
@@ -234,16 +251,19 @@ class _WebViewScreenState extends State<WebViewScreen> {
               .map((cookie) => '${cookie.name}=${cookie.value}')
               .join('; ');
           
-          print("Extracted cookies: $cookieHeader");
+          AppUtils.logInfo("Extracted cookies successfully");
           
-          // Store cookies in API service
+          // Store cookies in session manager
+          await _sessionManager.setSession(cookies: cookieHeader);
+          
+          // Also set in API service for immediate use
           _apiService.setSessionCookies(cookieHeader);
           
-          print("Session cookies stored successfully");
+          AppUtils.logInfo("Session cookies stored successfully");
         }
       }
     } catch (e) {
-      print("Error extracting cookies: $e");
+      AppUtils.logError("Extracting cookies", e);
     }
   }
 
@@ -254,15 +274,21 @@ class _WebViewScreenState extends State<WebViewScreen> {
       
       if (response != null) {
         if (response.isSuccess) {
-          print("Firebase token auto-registered successfully");
+          AppUtils.logInfo("Firebase token auto-registered successfully");
           _showToast("Device registered for notifications");
+          
+          // Update session with user info from response
+          await _sessionManager.updateUserInfo(
+            userId: response.userId,
+            userName: response.userName,
+          );
         } else {
-          print("Failed to auto-register token: ${response.message}");
+          AppUtils.logWarning("Failed to auto-register token: ${response.message}");
           _showToast("Failed to register device for notifications");
         }
       }
     } catch (e) {
-      print("Error in auto-register Firebase token: $e");
+      AppUtils.logError("Auto-register Firebase token", e);
     }
   }
 
