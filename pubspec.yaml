@@ -1,0 +1,55 @@
+name: webview_odoo_push
+description: Flutter mobile app with Firebase push notifications for Odoo integration
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Firebase dependencies
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.10
+  
+  # Local notifications
+  flutter_local_notifications: ^16.3.2
+  
+  # HTTP requests
+  http: ^1.1.2
+  
+  # WebView
+  flutter_inappwebview: ^6.0.0
+  webview_flutter: ^4.4.4
+  
+  # Storage and preferences
+  shared_preferences: ^2.2.2
+  
+  # Permissions
+  permission_handler: ^11.2.0
+  
+  # File operations
+  path_provider: ^2.1.2
+  
+  # Network connectivity
+  connectivity_plus: ^5.0.2
+  
+  # File downloader
+  flutter_downloader: ^1.11.6
+  
+  # URL launcher
+  url_launcher: ^6.2.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/www/

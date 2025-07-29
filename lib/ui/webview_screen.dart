@@ -8,9 +8,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:path_provider/path_provider.dart';
-// import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 
-import 'package:webview_odoo_push/firebase_messaging_service.dart';
+import 'package:webview_odoo_push/services/firebase_service.dart';
+import 'package:webview_odoo_push/services/api_service.dart';
+import 'package:webview_odoo_push/models/notification_model.dart';
+import 'package:webview_odoo_push/utils/constants.dart';
 
 class WebViewScreen extends StatefulWidget {
   const WebViewScreen({super.key});
@@ -22,22 +24,32 @@ class WebViewScreen extends StatefulWidget {
 class _WebViewScreenState extends State<WebViewScreen> {
   InAppWebViewController? webViewController;
   double progress = 0;
-  String defaultUrl = "http://194.59.165.228:8079/web?db=16Notification";
-  String currentUrl = "http://194.59.165.228:8079/web?db=16Notification";
+  String defaultUrl = Constants.defaultWebViewUrl;
+  String currentUrl = Constants.defaultWebViewUrl;
   DateTime? lastBackPressedTime;
 
-  late FirebaseMessagingService _firebaseMessagingService;
+  late FirebaseService _firebaseService;
+  late ApiService _apiService;
+  bool _isUserLoggedIn = false;
 
   @override
   void initState() {
     super.initState();
-    _firebaseMessagingService = FirebaseMessagingService(_updateUrlFromNotification);
-    _firebaseMessagingService.initializeFirebaseMessaging();
-
-    // _initDynamicLinks();
+    _firebaseService = FirebaseService();
+    _apiService = ApiService();
+    
+    _initializeServices();
     _requestPermissions();
     _listenForNetworkChanges();
     _setupDownloadListener();
+  }
+
+  Future<void> _initializeServices() async {
+    // Initialize Firebase service with callbacks
+    await _firebaseService.initialize(
+      onUrlUpdate: _updateUrlFromNotification,
+      onNotificationReceived: _handleNotificationReceived,
+    );
   }
 
   void _updateUrlFromNotification(String url) {
@@ -45,8 +57,21 @@ class _WebViewScreenState extends State<WebViewScreen> {
       defaultUrl = url;
       currentUrl = url;
     });
-    webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(currentUrl), headers: {"X-Access-Type": "webview"}));
+    webViewController?.loadUrl(
+      urlRequest: URLRequest(
+        url: WebUri(currentUrl), 
+        headers: {"X-Access-Type": "webview"}
+      )
+    );
     _showToast("Navigating from notification: $url");
+  }
+
+  void _handleNotificationReceived(NotificationModel notification) {
+    // Handle notification received callback
+    print("Notification received: ${notification.title}");
+    if (notification.title != null) {
+      _showToast("New notification: ${notification.title}");
+    }
   }
 
   @override
@@ -161,6 +186,86 @@ class _WebViewScreenState extends State<WebViewScreen> {
     );
   }
 
+  /// Check if user has logged in and extract session cookies
+  Future<void> _checkLoginAndExtractCookies(String url) async {
+    try {
+      // Check if URL indicates successful login
+      bool isLoginSuccess = _isLoginSuccessUrl(url);
+      
+      if (isLoginSuccess && !_isUserLoggedIn) {
+        print("Login detected, extracting cookies...");
+        
+        // Extract cookies from WebView
+        await _extractAndStoreCookies();
+        
+        // Mark user as logged in
+        _isUserLoggedIn = true;
+        
+        // Auto-register Firebase token
+        await _autoRegisterFirebaseToken();
+        
+        _showToast("Login successful! Token registered.");
+      }
+    } catch (e) {
+      print("Error in login detection: $e");
+    }
+  }
+
+  /// Check if the URL indicates successful login
+  bool _isLoginSuccessUrl(String url) {
+    // Check if we're on the dashboard and not on login page
+    return url.contains(Constants.dashboardUrl) && 
+           !url.contains(Constants.loginPageUrl) &&
+           !url.contains('login');
+  }
+
+  /// Extract cookies from WebView and store them
+  Future<void> _extractAndStoreCookies() async {
+    try {
+      if (webViewController != null) {
+        // Get cookies from the current domain
+        final uri = Uri.parse(currentUrl);
+        final cookieManager = CookieManager.instance();
+        final cookies = await cookieManager.getCookies(url: WebUri(uri.origin));
+        
+        if (cookies.isNotEmpty) {
+          // Convert cookies to header format
+          String cookieHeader = cookies
+              .map((cookie) => '${cookie.name}=${cookie.value}')
+              .join('; ');
+          
+          print("Extracted cookies: $cookieHeader");
+          
+          // Store cookies in API service
+          _apiService.setSessionCookies(cookieHeader);
+          
+          print("Session cookies stored successfully");
+        }
+      }
+    } catch (e) {
+      print("Error extracting cookies: $e");
+    }
+  }
+
+  /// Auto-register Firebase token after login
+  Future<void> _autoRegisterFirebaseToken() async {
+    try {
+      final response = await _firebaseService.autoRegisterAfterLogin();
+      
+      if (response != null) {
+        if (response.isSuccess) {
+          print("Firebase token auto-registered successfully");
+          _showToast("Device registered for notifications");
+        } else {
+          print("Failed to auto-register token: ${response.message}");
+          _showToast("Failed to register device for notifications");
+        }
+      }
+    } catch (e) {
+      print("Error in auto-register Firebase token: $e");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -222,6 +327,9 @@ class _WebViewScreenState extends State<WebViewScreen> {
                   setState(() {
                     progress = 1.0;
                   });
+                  
+                  // Check for login completion and extract cookies
+                  await _checkLoginAndExtractCookies(url.toString());
                 },
                 onProgressChanged: (controller, p) {
                   setState(() {
