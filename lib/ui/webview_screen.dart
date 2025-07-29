@@ -1,16 +1,15 @@
 import 'dart:io';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter_downloader/flutter_downloader.dart';
-import 'package:path_provider/path_provider.dart';
-// import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 
-import 'package:webview_odoo_push/firebase_messaging_service.dart';
+import '../services/firebase_service.dart';
+import '../services/notification_service.dart';
+import '../widgets/webview_widget.dart';
+import '../screens/notification_screen.dart';
+import '../utils/constants.dart';
 
 class WebViewScreen extends StatefulWidget {
   const WebViewScreen({super.key});
@@ -20,34 +19,284 @@ class WebViewScreen extends StatefulWidget {
 }
 
 class _WebViewScreenState extends State<WebViewScreen> {
-  InAppWebViewController? webViewController;
-  double progress = 0;
-  String defaultUrl = "http://194.59.165.228:8079/web?db=16Notification";
-  String currentUrl = "http://194.59.165.228:8079/web?db=16Notification";
+  String currentUrl = Constants.defaultWebViewUrl;
   DateTime? lastBackPressedTime;
-
-  late FirebaseMessagingService _firebaseMessagingService;
+  
+  final FirebaseService _firebaseService = FirebaseService();
+  final NotificationService _notificationService = NotificationService();
+  
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  late WebViewWidget _webViewWidget;
 
   @override
   void initState() {
     super.initState();
-    _firebaseMessagingService = FirebaseMessagingService(_updateUrlFromNotification);
-    _firebaseMessagingService.initializeFirebaseMessaging();
-
-    // _initDynamicLinks();
+    _initializeServices();
     _requestPermissions();
     _listenForNetworkChanges();
-    _setupDownloadListener();
   }
 
-  void _updateUrlFromNotification(String url) {
+  Future<void> _initializeServices() async {
+    try {
+      // Initialize Firebase service
+      await _firebaseService.initialize(
+        onTokenUpdate: _handleTokenUpdate,
+        onMessageReceived: _handleForegroundMessage,
+        onMessageOpenedApp: _handleNotificationOpen,
+      );
+
+      // Initialize Notification service
+      _notificationService.initialize(
+        onNotificationAction: _handleNotificationAction,
+        onForegroundNotification: _handleForegroundNotification,
+      );
+
+      debugPrint('Services initialized successfully');
+    } catch (e) {
+      debugPrint('Error initializing services: $e');
+    }
+  }
+
+  void _handleTokenUpdate(String newToken) {
+    debugPrint('Token updated: ${newToken.substring(0, 20)}...');
+    _showToast('Firebase token updated');
+  }
+
+  void _handleForegroundMessage(RemoteMessage message) {
+    _notificationService.handleForegroundMessage(message);
+  }
+
+  void _handleNotificationOpen(RemoteMessage message) {
+    _notificationService.handleNotificationOpen(message);
+  }
+
+  void _handleNotificationAction(String? url, Map<String, dynamic> data) {
+    if (url != null) {
+      _navigateToUrl(url);
+      _showToast('Navigating from notification: $url');
+    }
+  }
+
+  void _handleForegroundNotification(String? url, Map<String, dynamic> data) {
+    if (url != null) {
+      _navigateToUrl(url);
+    }
+    
+    // Show in-app notification
+    _showNotificationBanner(data);
+  }
+
+  void _showNotificationBanner(Map<String, dynamic> data) {
+    final title = data['title']?.toString() ?? 'New Notification';
+    final body = data['body']?.toString() ?? '';
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            if (body.isNotEmpty) Text(body),
+          ],
+        ),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Open',
+          onPressed: () {
+            final url = data[Constants.notificationLinkKey]?.toString();
+            if (url != null) {
+              _navigateToUrl(url);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _requestPermissions() async {
+    if (Platform.isAndroid) {
+      final status = await Permission.storage.request();
+      if (status.isDenied) {
+        _showToast("Storage permission denied. Cannot download files.");
+      }
+    }
+  }
+
+  void _listenForNetworkChanges() {
+    Connectivity().onConnectivityChanged.listen((List<ConnectivityResult> results) {
+      ConnectivityResult result = results.first;
+
+      if (result == ConnectivityResult.none) {
+        _showToast("Network is Offline");
+        _showNetworkErrorDialog();
+      } else {
+        if (currentUrl.contains('error.html') || currentUrl.isEmpty || currentUrl == 'about:blank') {
+          _navigateToUrl(Constants.defaultWebViewUrl);
+        }
+      }
+    });
+  }
+
+  void _showNetworkErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text("Error"),
+          content: const Text("No internet connection was found!"),
+          actions: <Widget>[
+            TextButton(
+              child: const Text("OK"),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _navigateToUrl(String url) {
     setState(() {
-      defaultUrl = url;
       currentUrl = url;
     });
-    webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(currentUrl), headers: {"X-Access-Type": "webview"}));
-    _showToast("Navigating from notification: $url");
+    _webViewWidget.navigateToUrl(url);
   }
+
+  void _showToast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _openNotificationScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => NotificationScreen(
+          onNavigateToUrl: _navigateToUrl,
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _firebaseService.dispose();
+    _notificationService.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _webViewWidget = WebViewWidget(
+      initialUrl: currentUrl,
+      onUrlChanged: (url) {
+        setState(() {
+          currentUrl = url;
+        });
+      },
+      onLoginDetected: (url) {
+        debugPrint('Login detected in WebView: $url');
+      },
+      onLogoutDetected: () {
+        debugPrint('Logout detected in WebView');
+      },
+    );
+
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+
+        if (await _webViewWidget.goBack()) {
+          return;
+        } else {
+          final now = DateTime.now();
+          if (lastBackPressedTime == null || now.difference(lastBackPressedTime!) > const Duration(seconds: 2)) {
+            lastBackPressedTime = now;
+            _showToast("Press once again to exit!");
+          } else {
+            SystemNavigator.pop();
+          }
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        appBar: AppBar(
+          title: const Text('Odoo App'),
+          backgroundColor: Colors.green,
+          foregroundColor: Colors.white,
+          leading: IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _webViewWidget.reload(),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.notifications),
+              onPressed: _openNotificationScreen,
+            ),
+            PopupMenuButton<String>(
+              onSelected: _handleMenuSelection,
+              itemBuilder: (BuildContext context) {
+                return [
+                  const PopupMenuItem<String>(
+                    value: 'home',
+                    child: Text('Home'),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'refresh_token',
+                    child: Text('Refresh Token'),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'notifications',
+                    child: Text('Notifications'),
+                  ),
+                ];
+              },
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: _webViewWidget,
+        ),
+      ),
+    );
+  }
+
+  void _handleMenuSelection(String value) {
+    switch (value) {
+      case 'home':
+        _navigateToUrl(Constants.defaultWebViewUrl);
+        break;
+      case 'refresh_token':
+        _refreshFirebaseToken();
+        break;
+      case 'notifications':
+        _openNotificationScreen();
+        break;
+    }
+  }
+
+  Future<void> _refreshFirebaseToken() async {
+    try {
+      _showToast('Refreshing Firebase token...');
+      final newToken = await _firebaseService.refreshToken();
+      if (newToken != null) {
+        _showToast('Token refreshed successfully');
+      } else {
+        _showToast('Failed to refresh token');
+      }
+    } catch (e) {
+      _showToast('Error refreshing token: $e');
+    }
+  }
+}
 
   @override
   void dispose() {
